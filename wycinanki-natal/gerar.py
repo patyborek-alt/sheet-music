@@ -1,6 +1,8 @@
 """Gera stencils estilo wycinanki (recorte folclórico polonês) de Natal.
-Preto = papel que fica (máscara). Branco = recortar e descartar (o spray passa).
-Cada desenho é validado: uma única peça conectada e pontes >= 2 mm."""
+Cinza/preto = o desenho que fica PINTADO no vidro (peça que se retira antes do spray).
+Branco = áreas que continuam cobertas (ficam transparentes).
+Validação: o desenho é uma peça só (sai inteira de uma vez) e não tem partes
+mais finas que 2 mm. Os textos podem ter acentos como peças separadas."""
 import math, sys
 from shapely.geometry import Point, Polygon, box, MultiPolygon
 from shapely.ops import unary_union
@@ -196,6 +198,142 @@ def faixa():
             holes += [heart(x, 3, 10), C(x - 7, -6, 1.8), C(x + 7, -6, 1.8)]
     return U(*paper), U(*holes)
 
+
+# ---------------------------------------------------------------- ptaszki, anioły, napis
+def _ptak():
+    """Passarinho da direita, olhando para a esquerda (centro)."""
+    body = E(52, 4, 30, 17, -18)
+    head = C(26, -16, 12)
+    beak = Polygon([(16, -20), (4, -14), (16, -11)])
+    crest = U(leaf(30, -28, 18, 6, 40), leaf(34, -24, 14, 5, 62))
+    tail = U(*[af.rotate(leaf(78, -22, 44, 14), a, origin=(76, 6)) for a in (-10, 12, 34, 56, 78)])
+    legs = U(box(42, 18, 46, 46), box(54, 16, 58, 46))
+    paper = U(body, head, beak, crest, tail, legs)
+    holes = [C(23, -18, 2.6), leaf(54, 2, 30, 11, -64), C(36, 8, 2), C(42, 13, 2),
+             heart(30, -2, 7, 160)]
+    holes += [af.rotate(leaf(78, -18, 26, 4.5), a, origin=(76, 6)) for a in (-10, 12, 34, 56, 78)]
+    return paper, U(*holes)
+
+def ptaszki():
+    pb, hb = _ptak()
+    stem = box(-3.5, -78, 3.5, 46)
+    branches = U(*[mir(af.rotate(leaf(14, y, 26, 10), -60, origin=(0, y + 6))) for y in (-52, -26, 0, 24)])
+    top = heart(0, -88, 26)
+    base = box(-112, 44, 112, 54)
+    sc = [C(-112 + 224 * k / 16, 54, 6.5) for k in range(17)]
+    paper = U(mir(pb), stem, branches, top, base, *sc)
+    holes = [mir(hb), heart(0, -86, 12)]
+    holes += [mir(af.rotate(leaf(14, y, 14, 3.5), -60, origin=(0, y + 6))) for y in (-52, -26, 0, 24)]
+    holes += [C(-112 + 224 * k / 16, 54, 2.4) for k in range(17)]
+    holes += [diamond(x, 49, 6, 5) for x in (-80, -66, 66, 80)]
+    return paper, U(*holes)
+
+def _aniol(detalhe=True):
+    head = C(0, -72, 14)
+    hair = U(C(-12, -66, 7), C(12, -66, 7))
+    halo = U(E(0, -96, 18, 6).difference(E(0, -96, 13, 2.6)), box(-2.5, -93, 2.5, -84)) if detalhe else \
+        U(E(0, -96, 18, 6), box(-3, -93, 3, -84))
+    neck = box(-5, -60, 5, -52)
+    dress = Polygon([(-11, -55), (11, -55), (44, 52), (-44, 52)])
+    hem = [C(-44 + 88 * k / 8, 52, 6) for k in range(9)]
+    feet = U(E(-10, 61, 6, 4), E(10, 61, 6, 4))
+    # asa: elipse inclinada com penas em festão na borda de baixo
+    wing = U(E(44, -34, 36, 17, -22),
+             *[af.rotate(E(44 + dx, -34 + 13, 7, 9), -22, origin=(44, -34)) for dx in (-22, -11, 0, 11, 22)],
+             af.rotate(leaf(84, -34, 22, 12, 90), -22, origin=(44, -34)))
+    wings = mir(wing)
+    paper = U(head, hair, halo, neck, dress, *hem, feet, wings)
+    holes = [star(0, -30, 5, 11, 4.6)]
+    if detalhe:
+        holes += [C(-5, -73, 1.8), C(5, -73, 1.8)]
+        holes += [mir(af.rotate(leaf(44 + dx, -36, 20, 6), -22, origin=(44, -34))) for dx in (-16, -2, 12)]
+        holes += [mir(af.rotate(C(44 + dx, -22, 2.2), -22, origin=(44, -34))) for dx in (-22, -11, 0, 11, 22)]
+        holes += [heart(k * 11, -6, 7) for k in (-1, 0, 1)]
+        holes += [drop(k * 11, 12, 9, 5) for k in (-2, -1, 0, 1, 2)]
+        holes += [diamond(k * 10, 30, 5, 8) for k in (-3, -2, -1, 0, 1, 2, 3)]
+        holes += [C(-44 + 88 * k / 8, 52, 2.2) for k in range(9)]
+    else:
+        holes += [mir(af.rotate(leaf(44 + dx, -36, 22, 8), -22, origin=(44, -34))) for dx in (-12, 10)]
+        holes += [heart(0, 4, 14), diamond(-16, 28, 8, 13), diamond(16, 28, 8, 13), diamond(0, 30, 8, 13)]
+    return paper, U(*holes)
+
+def aniol():
+    return _aniol(True)
+
+def anioly():
+    p, h = _aniol(False)
+    ps, hs = [], []
+    for x in (-165, 0, 165):
+        ps.append(af.translate(p, x, 0)); hs.append(af.translate(h, x, 0))
+    W = 250
+    base = box(-W, 60, W, 70)
+    sc = [C(-W + 2 * W * k / 28, 70, 8) for k in range(29)]
+    hs += [C(-W + 2 * W * k / 28, 71, 2.6) for k in range(29)]
+    hs += [heart(x, 65, 7) for x in (-82, 82)]
+    return U(*ps, base, *sc), U(*hs)
+
+FONTE = "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf"
+def texto(s, size=100.0, track=4.0):
+    from fontTools.ttLib import TTFont
+    from fontTools.pens.basePen import BasePen
+    f = TTFont(FONTE); gs = f.getGlyphSet(); cmap = f.getBestCmap(); upm = f["head"].unitsPerEm
+    k = size / upm
+    class P(BasePen):
+        def __init__(s_, gs_): super().__init__(gs_); s_.rings = []; s_.cur = []
+        def _moveTo(s_, p): s_.cur = [p]
+        def _lineTo(s_, p): s_.cur.append(p)
+        def _curveToOne(s_, a, b, c):
+            p0 = s_.cur[-1]
+            for i in range(1, 13):
+                t = i / 12; u = 1 - t
+                s_.cur.append(tuple(u**3*p0[j] + 3*u*u*t*a[j] + 3*u*t*t*b[j] + t**3*c[j] for j in (0, 1)))
+        def _qCurveToOne(s_, a, b):
+            p0 = s_.cur[-1]
+            for i in range(1, 10):
+                t = i / 9; u = 1 - t
+                s_.cur.append(tuple(u*u*p0[j] + 2*u*t*a[j] + t*t*b[j] for j in (0, 1)))
+        def _closePath(s_):
+            if len(s_.cur) > 2: s_.rings.append(s_.cur)
+            s_.cur = []
+        _endPath = _closePath
+    x = 0; letters = []
+    for ch in s:
+        gn = cmap[ord(ch)]; pen = P(gs); gs[gn].draw(pen)
+        g = Polygon()
+        for r in pen.rings:
+            g = g.symmetric_difference(Polygon([(x + px, -py) for px, py in r]).buffer(0))
+        letters.append(af.scale(g, k, k, origin=(0, 0)))
+        x += gs[gn].width + track * upm / size
+    return letters
+
+def _napis(palavra):
+    letters = texto(palavra)
+    g = unary_union(letters)
+    minx, miny, maxx, maxy = g.bounds
+    letters = [af.translate(l, -(minx + maxx) / 2, 0) for l in letters]
+    g = unary_union(letters); minx, miny, maxx, maxy = g.bounds
+    # base: barra na linha de base (y=0) com festão
+    W = maxx - minx + 40
+    base = box(-W / 2, -1.5, W / 2, 9)
+    n = int(W // 13)
+    sc = [C(-W / 2 + W * i / n, 9, 5.5) for i in range(n + 1)]
+    ends = [heart(s * (W / 2 + 6), 3, 22, s * 90) for s in (-1, 1)]
+    paper = U(*letters, base, *sc, *ends)
+    # pontes para acentos soltos (ex.: o acento do Ś)
+    parts = [paper] if isinstance(paper, Polygon) else sorted(paper.geoms, key=lambda p: -p.area)
+    bridges = []
+    for p in parts[1:]:
+        cx = p.centroid.x; by = p.bounds[3]
+        pass
+    paper = U(paper, *bridges)
+    zona = unary_union(letters).buffer(2.5)
+    holes = [C(-W / 2 + W * i / n, 9, 2) for i in range(n + 1) if not C(-W / 2 + W * i / n, 9, 2).intersects(zona)]
+    holes += [heart(s * (W / 2 + 6), 3, 9, s * 90) for s in (-1, 1)]
+    return paper, U(*holes)
+
+def wesolych(): return _napis("Wesołych")
+def swiat(): return _napis("Świąt")
+
 DESENHOS = [
     ("choinka", "Choinka — Árvore de Natal", choinka),
     ("rozeta", "Gwiazda — Roseta de estrela", rozeta),
@@ -204,12 +342,24 @@ DESENHOS = [
     ("dzwonek", "Dzwonek — Sino", dzwonek),
     ("betlejemska", "Gwiazda Betlejemska — Estrela de Belém", betlejemska),
     ("faixa", "Girlanda — Faixa de rodapé (2×)", faixa),
+    ("ptaszki", "Ptaszki — Passarinhos e árvore da vida", ptaszki),
+    ("aniol", "Anioł — Anjo", aniol),
+    ("anioly", "Anioły — Faixa de anjinhos", anioly),
+    ("wesolych", "„Wesołych” — 1ª palavra de Wesołych Świąt", wesolych),
+    ("swiat", "„Świąt” — 2ª palavra de Wesołych Świąt", swiat),
 ]
+PAISAGEM = {"anioly", "wesolych", "swiat"}
 
 MAXW, MAXH = 186, 246   # área útil no A4 (com legenda)
 
 def build(fn, key):
     paper, holes = fn()
+    minx, miny, maxx, maxy = paper.bounds
+    mw, mh = (273, 160) if key in PAISAGEM else (MAXW, 120 if key == "faixa" else MAXH)
+    f = min(1.6, mw / (maxx - minx), mh / (maxy - miny))
+    paper = af.scale(paper, f, f, origin=(0, 0)); holes = af.scale(holes, f, f, origin=(0, 0))
+    # abertura morfológica: elimina lascas de papel mais finas que ~2,4 mm
+    paper = paper.buffer(-1.2, 32).buffer(1.2, 32)
     inner = paper.buffer(-2.5)
     hs = [holes] if isinstance(holes, Polygon) else list(holes.geoms)
     kept = [h for h in hs if inner.contains(h)]
@@ -217,18 +367,18 @@ def build(fn, key):
     holes = unary_union(kept)
     g = paper.difference(holes).buffer(0)
     minx, miny, maxx, maxy = g.bounds
-    lim_h = 120 if key == "faixa" else MAXH
-    f = min(1.0, MAXW / (maxx - minx), lim_h / (maxy - miny))
-    g = af.scale(g, f, f, origin=(0, 0))
-    minx, miny, maxx, maxy = g.bounds
     return af.translate(g, -(minx + maxx) / 2, -(miny + maxy) / 2)
 
 def check(name, g):
     ok = True
     if not isinstance(g, Polygon):
-        print(f"  !! {name}: {len(g.geoms)} peças soltas", [round(p.area) for p in g.geoms]); ok = False
-    e = g.buffer(-1.0)  # ponte mínima de 2 mm
-    if not isinstance(e, Polygon):
+        n = len(g.geoms)
+        if name.startswith(("wesolych", "swiat")):
+            print(f"  ({name}: {n} peças — letras/acentos separados, ok com papel adesivo)")
+        else:
+            print(f"  !! {name}: {n} peças soltas", [round(p.area) for p in g.geoms]); ok = False
+    e = g.buffer(-1.0)  # largura mínima de 2 mm
+    if not name.startswith(("wesolych", "swiat")) and not isinstance(e, Polygon) and sum(p.area > 1 for p in e.geoms) > (1 if isinstance(g, Polygon) else len(g.geoms)):
         print(f"  !! {name}: ponte fina (<2mm) separa partes", [round(p.area) for p in e.geoms]); ok = False
     # furos que viraram parte da borda (tocaram fora) ainda são ok, só informa
     b = g.bounds
@@ -249,7 +399,10 @@ if __name__ == "__main__":
     for key, title, fn in DESENHOS:
         g = build(fn, key)
         allok &= check(key, g)
-        minx, miny, maxx, maxy = g.bounds
-        out[key] = dict(title=title, d=path_d(g), bounds=[minx, miny, maxx, maxy])
+        out[key] = dict(land=key in PAISAGEM, title=title, d=path_d(g), bounds=list(g.bounds))
+        if key in ("wesolych", "swiat"):   # versão espelhada para aplicar por dentro da vitrine
+            m = af.scale(g, -1, 1, origin=(0, 0))
+            out[key + "_esp"] = dict(land=True, title=title + " (ESPELHADO — aplicar por dentro)",
+                                     d=path_d(m), bounds=list(m.bounds))
     json.dump(out, open(sys.argv[1] if len(sys.argv) > 1 else "paths.json", "w"))
     print("TUDO OK" if allok else "HÁ PROBLEMAS")
