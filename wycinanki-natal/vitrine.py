@@ -178,51 +178,66 @@ def canto(cx, cy, R, a0, a1, seed=3, w_borda=14):
     return U(*g)
 
 
-def renda(regiao, passo, seed=0, borda=None):
-    """Renda floral densa: motivos em grade irregular dentro de 'regiao', ligados por hastes."""
-    rnd = random.Random(seed)
-    minx, miny, maxx, maxy = regiao.bounds
-    pts = []
-    yy = miny + passo * 0.5; row = 0
-    while yy < maxy + passo * 0.3:
-        xx = minx + passo * (0.5 if row % 2 == 0 else 1.0)
-        while xx < maxx + passo * 0.3:
-            p = (xx + rnd.uniform(-0.18, 0.18) * passo, yy + rnd.uniform(-0.18, 0.18) * passo)
-            if regiao.contains(Point(p)): pts.append(p)
-            xx += passo
-        yy += passo * 0.87; row += 1
-    g = []
-    # hastes ligando vizinhos
-    for i, (x, y) in enumerate(pts):
-        viz = sorted(pts[:i], key=lambda q: (q[0] - x) ** 2 + (q[1] - y) ** 2)[:2]
-        for (qx, qy) in viz:
-            d = math.hypot(qx - x, qy - y)
-            if d < passo * 1.35:
-                mx, my = (x + qx) / 2 + (qy - y) * 0.25, (y + qy) / 2 - (qx - x) * 0.25
-                g.append(m_ramo(bez((x, y), (mx, my), (qx, qy), n=24), passo * 0.045, 2, passo * 0.3, passo * 0.11, seed=i))
-    tipos = [m_flor, m_rosa, m_floco, m_tulipa, m_flor, "folhas", m_rosa, "voluta"]
-    for i, (x, y) in enumerate(pts):
-        t = tipos[rnd.randrange(len(tipos))]
-        r = passo * rnd.uniform(0.36, 0.46)
-        a = rnd.uniform(0, 360)
-        if t == "folhas":
-            for k in range(3):
-                g.append(m_folha(x, y, r * 1.5, r * 0.55, a + k * 120).__class__ and
-                         mv(rot(m_folha(0, -r * 0.7, r * 1.4, r * 0.5, 0), a + k * 120), x, y))
-            g.append(C(x, y, r * 0.18))
-        elif t == "voluta":
-            g.append(m_voluta(x, y, r * 0.9, a, 1 if i % 2 else -1, passo * 0.045))
-            g.append(leaf(x, y - r * 0.3, r * 0.9, r * 0.35, a))
-        elif t is m_tulipa:
-            g.append(m_tulipa(x, y + r * 0.4, r * 2.0, a))
-        elif t is m_flor:
-            g.append(m_flor(x, y, r, rnd.choice([6, 8, 10]), a))
-        else:
-            g.append(t(x, y, r * (1.05 if t is m_floco else 0.95), a) if t is not m_rosa else m_rosa(x, y, r * 0.95, a))
-        # pontinhos soltos
-        g.append(C(x + passo * 0.45 * math.cos(a), y + passo * 0.45 * math.sin(a), passo * 0.045))
-    if borda is not None: g.append(borda)
-    return U(*g)
+class Renda:
+    """Renda organizada: vinhas (hastes) com flores alternadas e folhas, sem nada sobreposto."""
+    def __init__(self, excl=None, gap=14):
+        self.g = []; self.ocup = excl if excl is not None else Polygon(); self.gap = gap
+    def tenta(self, m, forcar=False):
+        if forcar or not m.intersects(self.ocup):
+            self.g.append(m); self.ocup = self.ocup.union(m.buffer(self.gap)); return True
+        return False
+    def vinha(self, pts, r, w, seed=0, tipos=("flor", "rosa", "floco", "tulipa")):
+        rnd = random.Random(seed)
+        L = LineString(pts)
+        haste = stroke(pts, w)
+        passo = r * 2.25
+        n = int(L.length / passo)
+        motivos, folhas = [], []
+        for i in range(n):
+            d = (i + 0.5) * passo
+            p = L.interpolate(d); q = L.interpolate(min(d + 5, L.length))
+            ang = math.degrees(math.atan2(q.y - p.y, q.x - p.x))
+            s = 1 if i % 2 == 0 else -1
+            nx, ny = -math.sin(math.radians(ang)) * s, math.cos(math.radians(ang)) * s
+            cx, cy = p.x + nx * r * 0.3, p.y + ny * r * 0.3
+            t = tipos[i % len(tipos)]
+            a = rnd.choice([0, 15, 30])
+            if t == "flor": m = m_flor(cx, cy, r, 8, a)
+            elif t == "rosa": m = m_rosa(cx, cy, r * 0.82, a)
+            elif t == "floco": m = m_floco(cx, cy, r, a)
+            else: m = mv(rot(m_tulipa(0, r * 0.35, r * 1.8), ang + (90 if s > 0 else -90) + 180), cx, cy)
+            motivos.append(m)
+            # folhas no lado oposto, entre as flores
+            for k, dd in enumerate((d + passo * 0.5,)):
+                if dd >= L.length: continue
+                p2 = L.interpolate(dd); q2 = L.interpolate(min(dd + 5, L.length))
+                a2 = math.degrees(math.atan2(q2.y - p2.y, q2.x - p2.x))
+                for s2 in (1, -1):
+                    th = a2 + s2 * 65
+                    folhas.append(mv(rot(m_folha(0, -r * 0.58, r * 1.05, r * 0.42, 0), th + 90), p2.x, p2.y))
+        for m in motivos: self.tenta(m)
+        self.g.append(haste)
+        for f in folhas: self.tenta(f)
+    def pontos(self, regiao, r, seed=0):
+        """Preenche espaços livres que sobraram com floquinhos e bolinhas."""
+        rnd = random.Random(seed)
+        minx, miny, maxx, maxy = regiao.bounds
+        for _ in range(400):
+            x, y = rnd.uniform(minx, maxx), rnd.uniform(miny, maxy)
+            if not regiao.contains(Point(x, y)): continue
+            m = m_floco(x, y, r, rnd.choice([0, 30])) if rnd.random() < 0.5 else C(x, y, r * 0.22)
+            self.tenta(m)
+    def geom(self): return U(*self.g)
+
+def onda_pts(x0, y0, x1, y1, amp, lam, vertical=True, passo=8):
+    if vertical:
+        cx = (x0 + x1) / 2
+        return [(cx + amp * math.sin(2 * math.pi * (y - y0) / lam), y) for y in [y0 + i * passo for i in range(int((y1 - y0) / passo) + 1)]]
+    cy = (y0 + y1) / 2
+    return [(x, cy + amp * math.sin(2 * math.pi * (x - x0) / lam)) for x in [x0 + i * passo for i in range(int((x1 - x0) / passo) + 1)]]
+
+def arco_pts(cx, cy, R, a0, a1, n=60):
+    return [(cx + R * math.cos(math.radians(a0 + (a1 - a0) * i / n)), cy + R * math.sin(math.radians(a0 + (a1 - a0) * i / n))) for i in range(n + 1)]
 
 def onda(x0, y0, x1, y1, amp, lam, lado):
     """Polígono de faixa com borda interna ondulada. lado: 'L','R','T','B' = lado colado no caixilho."""
@@ -330,12 +345,6 @@ def texto(s, x, y, altura, fontes=FONTES):
 def porta_esquerda(W=1390, H=2400):
     branco, verm = [], []
     # renda das bordas (densa, borda interna ondulada)
-    reg = U(onda(0, 0, W, H * 0.07, 25, 260, "T"),
-            onda(0, 0, W * 0.17, H, 30, 330, "L"),
-            onda(W * 0.81, 0, W, H * 0.97, 30, 330, "R"),
-            leque(0, 0, W * 0.27, 0, 90), leque(W, 0, W * 0.27, 90, 180), leque(0, H, W * 0.3, -90, 0))
-    moldura = U(box(0, 0, W, 16), box(0, 0, 16, H), box(W - 16, 0, W, H * 0.97))
-    branco.append(renda(reg, W * 0.115, seed=11, borda=moldura))
     # medalhões grandes nas laterais (altura do floco central)
     branco.append(m_flor(W * 0.08, H * 0.56, W * 0.13, 12))
     branco.append(m_flor(W * 0.9, H * 0.56, W * 0.12, 12, 15))
@@ -388,18 +397,31 @@ def porta_esquerda(W=1390, H=2400):
         br, vr = bola(W * u, H * v, W * r)
         branco.append(br); verm.append(vr)
         branco.append(box(W * u - 2.5, H * 0.62, W * u + 2.5, H * v - W * r * 1.1))
+    centro = U(*branco, *verm)
+    R = Renda(excl=centro.buffer(W * 0.012), gap=W * 0.007)
+    r = W * 0.06; w = W * 0.011
+    R.vinha(onda_pts(W * 0.03, H * 0.02, W * 0.17, H * 0.99, W * 0.025, W * 0.5), r, w, seed=1)
+    R.vinha(onda_pts(W * 0.83, H * 0.02, W * 0.97, H * 0.96, W * 0.025, W * 0.5), r, w, seed=2, tipos=("rosa", "flor", "tulipa", "floco"))
+    R.vinha(onda_pts(W * 0.15, H * 0.005, W * 0.85, H * 0.06, H * 0.008, W * 0.45, vertical=False), r * 0.8, w, seed=3, tipos=("floco", "flor", "rosa", "tulipa"))
+    R.vinha(arco_pts(0, H, W * 0.3, -88, -2), r * 0.9, w, seed=4, tipos=("tulipa", "flor", "rosa"))
+    R.vinha(arco_pts(0, 0, W * 0.2, 5, 85), r * 0.8, w, seed=6, tipos=("rosa", "flor"))
+    R.vinha(arco_pts(W, 0, W * 0.2, 95, 175), r * 0.8, w, seed=7, tipos=("flor", "rosa"))
+    R.pontos(U(box(0, 0, W * 0.2, H), box(W * 0.8, 0, W, H * 0.96), box(0, 0, W, H * 0.08)), W * 0.025, seed=5)
+    branco.append(R.geom())
+    branco.append(U(box(0, 0, W, 16), box(0, 0, 16, H), box(W - 16, 0, W, H * 0.96)))
     B = U(*branco).intersection(box(0, 0, W, H))
     V = U(*verm).intersection(box(0, 0, W, H)).difference(B)
     return B, V
 
 def porta_direita(W=1520, H=2400):
-    reg = U(leque(0, 0, W * 0.42, 0, 90), onda(0, 0, W * 0.45, H * 0.07, 25, 260, "T"),
-            onda(0, 0, W * 0.12, H * 0.36, 25, 300, "L"),
-            leque(0, H, W * 0.5, -90, 0), onda(0, H * 0.6, W * 0.12, H, 25, 300, "L"),
-            onda(0, H * 0.95, W * 0.55, H, 20, 260, "B"))
-    moldura = U(box(0, 0, W * 0.45, 16), box(0, 0, 16, H * 0.36), box(0, H * 0.6, 16, H), box(0, H - 16, W * 0.55, H))
-    B = renda(reg, W * 0.1, seed=21, borda=moldura).intersection(box(0, 0, W, H))
-    return B, Polygon()
+    R = Renda(gap=W * 0.007)
+    r = W * 0.055; w = W * 0.01
+    for k, (rr, tp) in enumerate([(0.2, ("flor",)), (0.4, ("rosa", "flor", "floco")), (0.6, ("tulipa", "flor", "rosa", "floco"))]):
+        R.vinha(arco_pts(0, 0, W * rr, 4, 86), r, w, seed=10 + k, tipos=tp)
+        R.vinha(arco_pts(0, H, W * rr * 1.1, -86, -4), r, w, seed=20 + k, tipos=tp)
+    R.pontos(U(Point(0, 0).buffer(W * 0.66), Point(0, H).buffer(W * 0.72)), W * 0.023, seed=7)
+    B = U(R.geom(), box(0, 0, W * 0.62, 16), box(0, 0, 16, W * 0.62), box(0, H - 16, W * 0.68, H), box(0, H - W * 0.68, 16, H))
+    return B.intersection(box(0, 0, W, H)), Polygon()
 
 def limpa(g, r=1.0):
     """Abertura morfológica: elimina partes mais finas que 2r mm."""
