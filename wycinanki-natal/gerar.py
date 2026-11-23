@@ -408,5 +408,12 @@ if __name__ == "__main__":
             m = af.scale(g, -1, 1, origin=(0, 0))
             out[key + "_esp"] = dict(land=True, title=title + " (ESPELHADO — aplicar por dentro)",
                                      d=path_d(m), bounds=list(m.bounds))
+    import os
+    os.makedirs("svg", exist_ok=True)   # vetores em mm reais, para gráfica/plotter de recorte
+    for k, v in out.items():
+        b = v["bounds"]; w, h = b[2] - b[0], b[3] - b[1]
+        open(f"svg/{k}.svg", "w").write(
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="{w:.1f}mm" height="{h:.1f}mm" '
+            f'viewBox="{b[0]:.2f} {b[1]:.2f} {w:.2f} {h:.2f}"><path fill="#000" fill-rule="evenodd" d="{v["d"]}"/></svg>')
     json.dump(out, open(sys.argv[1] if len(sys.argv) > 1 else "paths.json", "w"))
     print("TUDO OK" if allok else "HÁ PROBLEMAS")
