@@ -1,6 +1,5 @@
 """Simulação da decoração de Natal sobre a FOTO real da fachada da PierogiShop.
-Vidro: neve spray com os stencils. Parede/janela/porta: wycinanki coloridos (vinil ou papel)
-e guirlanda. Escala da foto ≈ 2,06 px/cm (porta lateral ≈ 80 cm = 165 px)."""
+Usa somente os desenhos do PDF, todos aplicados com spray branco pelo método do stencil. Escala da foto ≈ 2,06 px/cm (porta lateral ≈ 80 cm = 165 px)."""
 import sys, io, contextlib, math
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
@@ -102,52 +101,11 @@ put(mask(G["rozeta"], W=cm(46)), 468, cy=1140)
 for (x, y) in [(405, 1076), (531, 1076)]:
     put(mask(G["sniezynka"], H=cm(13)), x, cy=y)
 
-# =================== PAREDE (wycinanki coloridos, 2 camadas) ===================
-duas_camadas(G["ptaszki"], cm(118), 468, top=1253, cor=VERM, fundo=BRANCO)
-
-# enfeites pendurados sob a marquise (barbante + wycinanka dupla face)
-d = ImageDraw.Draw(img)
-for (x, yb, k, cor) in [(213, 948, "betlejemska", VERM), (330, 940, "rozeta", VERDE), (440, 952, "bombka", VERM), (520, 938, "sniezynka", VERDE)]:
-    d.line((x * SS, 914 * SS, x * SS, (yb - 18) * SS), fill=(55, 45, 40), width=2 * SS)
-    duas_camadas(G[k], cm(19), x, cy=yb, cor=cor, fundo=BRANCO, borda=4)
-
-# =================== PORTA DE GRADE: guirlanda (wieniec) com wycinanka ===================
-def wieniec():
-    R = 230
-    folhas_a = U(*[af.rotate(leaf(0, -R - 10, 120, 44), a + 12, origin=(0, -R - 10)).__class__ and
-                   af.rotate(af.rotate(leaf(0, -R - 10, 120, 44), 35, origin=(0, -R - 10)), a, origin=(0, 0)) for a in range(0, 360, 15)])
-    folhas_b = U(*[af.rotate(af.rotate(leaf(0, -R + 30, 100, 38), -35, origin=(0, -R + 30)), a + 7, origin=(0, 0)) for a in range(0, 360, 15)])
-    bagas = U(*[C((R + 5 * ((i % 3) - 1)) * math.cos(math.radians(a)), (R - 8 * (i % 2)) * math.sin(math.radians(a)), 16)
-                for i, a in enumerate(range(10, 370, 24))])
-    laco = U(mir(af.rotate(leaf(70, R + 10, 140, 80), 70, origin=(70, R + 10))),
-             mir(Polygon([(10, R + 20), (40, R + 20), (95, R + 160), (60, R + 150), (55, R + 175)])), C(0, R + 15, 32))
-    return folhas_a, folhas_b, bagas, laco
-fa, fb, bg, lc = wieniec()
-tot = unary_union([fa, fb, bg, lc]); bx = tot.bounds
-k = cm(55) / (bx[2] - bx[0])
-def place(g, cor, sombra=False):
-    g2 = af.translate(af.scale(g, k, k, origin=(0, 0)), 0, 0)
-    m = mask(unary_union([g2, Polygon([(bx[0] * k, bx[1] * k), (bx[0] * k + 0.01, bx[1] * k)]).buffer(0.001)]), W=None, H=None) if False else None
-# rasteriza todas as camadas no mesmo quadro
-def raster(gs_cores, W, cx, cy):
-    global img
-    minx, miny, maxx, maxy = tot.bounds
-    kk = W / (maxx - minx) * SS
-    w, h = int((maxx - minx) * kk) + 2, int((maxy - miny) * kk) + 2
-    x0, y0 = int(cx * SS - w / 2), int(cy * SS - h / 2)
-    for g, cor, sh in gs_cores:
-        S = 3
-        im = Image.new("L", (w * S, h * S), 0); dd = ImageDraw.Draw(im)
-        polys = [g] if isinstance(g, Polygon) else list(g.geoms)
-        tr = lambda cs: [((x - minx) * kk * S, (y - miny) * kk * S) for x, y in cs]
-        for p in polys:
-            dd.polygon(tr(p.exterior.coords), fill=255)
-            for i in p.interiors: dd.polygon(tr(i.coords), fill=0)
-        m = im.resize((w, h), Image.LANCZOS)
-        put(m, (x0 + w / 2) / SS, cy=(y0 + h / 2) / SS, cor=cor, op=1, neve=False, sombra=sh)
-raster([(fa, VERDE, True), (fb, VERDE2, False), (bg, VERM, False), (lc, VERM, True)], cm(55), 214, 1178)
-# wycinanka branca/vermelha no centro da guirlanda
-duas_camadas(G["betlejemska"], cm(22), 214, cy=1170, cor=VERM, fundo=BRANCO, borda=4)
+# =================== PAREDE, JANELA E PORTA: só os desenhos do PDF ===================
+# parede sob a janela: Ptaszki pintado com o mesmo stencil (spray branco na parede)
+put(mask(G["ptaszki"], W=cm(118)), 468, top=1253, op=0.95)
+# vidro da porta de grade: Estrela de Belém em neve spray
+put(mask(G["betlejemska"], H=cm(42)), 214, cy=1185)
 
 # =================== devolve a escada para a frente ===================
 orig = np.asarray(foto.resize(img.size, Image.LANCZOS), float)
