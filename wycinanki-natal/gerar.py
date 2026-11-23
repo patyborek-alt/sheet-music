@@ -357,6 +357,10 @@ def build(fn, key):
     minx, miny, maxx, maxy = paper.bounds
     mw, mh = (273, 160) if key in PAISAGEM else (MAXW, 120 if key == "faixa" else MAXH)
     f = min(1.6, mw / (maxx - minx), mh / (maxy - miny))
+    if key == "swiat":  # mesma altura de letra que "Wesołych" para as duas linhas combinarem
+        pw, _ = wesolych()
+        b = pw.bounds
+        f = min(1.6, mw / (b[2] - b[0]), mh / (b[3] - b[1]))
     paper = af.scale(paper, f, f, origin=(0, 0)); holes = af.scale(holes, f, f, origin=(0, 0))
     # abertura morfológica: elimina lascas de papel mais finas que ~2,4 mm
     paper = paper.buffer(-1.2, 32).buffer(1.2, 32)
