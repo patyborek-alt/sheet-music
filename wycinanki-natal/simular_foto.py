@@ -1,124 +1,95 @@
 """Simulação da decoração de Natal sobre a FOTO real da fachada da PierogiShop.
-Usa somente os desenhos do PDF, todos aplicados com spray branco pelo método do stencil. Escala da foto ≈ 2,06 px/cm (porta lateral ≈ 80 cm = 165 px)."""
-import sys, io, contextlib, math
+Usa somente os desenhos do PDF, aplicados com spray branco pelo método do stencil.
+Gera a vista geral e closes em alta resolução (os desenhos são vetoriais, ficam nítidos).
+Escala da foto ≈ 2,06 px/cm (porta lateral ≈ 80 cm = 165 px)."""
+import sys, io, contextlib
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
-from shapely.geometry import Polygon, Point
-from shapely.ops import unary_union
+from shapely.geometry import Polygon
 from shapely import affinity as af
 import gerar
-from gerar import C, leaf, mir, U, star, heart
 
 FOTO, OUT = sys.argv[1], sys.argv[2]
 with contextlib.redirect_stdout(io.StringIO()):
     G = {k: gerar.build(fn, k) for k, _, fn in gerar.DESENHOS}
-PXCM = 2.06
-SS = 2                                      # trabalha em 2x para ficar nítido
 foto = Image.open(FOTO).convert("RGB")
-img = foto.resize((foto.width * SS, foto.height * SS), Image.LANCZOS)
-rng = np.random.default_rng(3)
-
-def mask(g, W=None, H=None, fill_holes=False):
-    """Rasteriza geometria g para caber em largura W (ou altura H) px finais."""
-    if fill_holes:
-        polys = [g] if isinstance(g, Polygon) else list(g.geoms)
-        g = unary_union([Polygon(p.exterior) for p in polys])
-    minx, miny, maxx, maxy = g.bounds
-    k = (W / (maxx - minx)) if W else (H / (maxy - miny))
-    k *= SS
-    w, h = int((maxx - minx) * k) + 2, int((maxy - miny) * k) + 2
-    S = 3
-    im = Image.new("L", (w * S, h * S), 0); d = ImageDraw.Draw(im)
-    polys = [g] if isinstance(g, Polygon) else list(g.geoms)
-    tr = lambda cs: [((x - minx) * k * S, (y - miny) * k * S) for x, y in cs]
-    for p in polys:
-        d.polygon(tr(p.exterior.coords), fill=255)
-        for i in p.interiors: d.polygon(tr(i.coords), fill=0)
-    return im.resize((w, h), Image.LANCZOS)
-
-def put(m, cx, cy=None, top=None, bottom=None, cor=(250, 252, 255), op=0.9, neve=True, sombra=False):
-    """Compõe máscara m na foto. Coordenadas em px da foto original."""
-    global img
-    w, h = m.size
-    x = int(cx * SS - w / 2)
-    if top is not None: y = int(top * SS)
-    elif bottom is not None: y = int(bottom * SS - h)
-    else: y = int(cy * SS - h / 2)
-    a = np.asarray(m, float) / 255
-    if neve:
-        a = np.asarray(m.filter(ImageFilter.GaussianBlur(0.5)), float) / 255
-        n = rng.normal(1, 0.12, a.shape).clip(0.65, 1.1)
-        a = a * n
-    a = (a * op).clip(0, 1)
-    base = np.asarray(img, float)
-    if sombra:
-        sh = np.asarray(m.filter(ImageFilter.GaussianBlur(3 * SS)), float) / 255 * 0.35
-        sx, sy = x + 2 * SS, y + 3 * SS
-        reg = base[sy:sy + h, sx:sx + w]
-        reg *= (1 - sh[:reg.shape[0], :reg.shape[1], None])
-    reg = base[y:y + h, x:x + w]
-    aa = a[:reg.shape[0], :reg.shape[1], None]
-    base[y:y + h, x:x + w] = reg * (1 - aa) + np.array(cor, float) * aa
-    img = Image.fromarray(base.clip(0, 255).astype(np.uint8))
-
-VERM, VERDE, VERDE2, BRANCO = (196, 20, 42), (30, 104, 60), (52, 138, 78), (247, 245, 238)
-
-def duas_camadas(g, W, cx, cy=None, top=None, bottom=None, cor=VERM, fundo=BRANCO, borda=5):
-    """Wycinanka de 2 camadas: silhueta de fundo um pouco maior + desenho colorido em cima."""
-    minx, miny, maxx, maxy = g.bounds
-    esc = (maxx - minx)
-    fundo_g = g.buffer(esc * 0.018 * borda / 5)
-    Wf = W * (fundo_g.bounds[2] - fundo_g.bounds[0]) / esc
-    mf = mask(fundo_g, W=Wf, fill_holes=True)
-    m = mask(g, W=W)
-    if top is not None: dy = (mf.size[1] - m.size[1]) / 2 / SS; put(mf, cx, top=top - dy, cor=fundo, op=1, neve=False, sombra=True); put(m, cx, top=top, cor=cor, op=1, neve=False)
-    elif bottom is not None:
-        dy = (mf.size[1] - m.size[1]) / 2 / SS
-        put(mf, cx, bottom=bottom + dy, cor=fundo, op=1, neve=False, sombra=True); put(m, cx, bottom=bottom, cor=cor, op=1, neve=False)
-    else:
-        put(mf, cx, cy=cy, cor=fundo, op=1, neve=False, sombra=True); put(m, cx, cy=cy, cor=cor, op=1, neve=False)
-
+PXCM = 2.06
 cm = lambda v: v * PXCM
 
-# =================== VIDRO (neve spray) ===================
-# porta esquerda x 668–950 · porta direita x 954–1255 · vidro y 932–1430
-put(mask(G["wesolych"], W=cm(112)), 809, top=957)
-hw = cm(112) * 43 / 273                       # altura de "Wesołych"
-hs = cm(112) * 168 / 273 * 49 / 168          # "Świąt" com a mesma escala de letra
-put(mask(G["swiat"], W=cm(112) * 168 / 273), 1104, top=957 + hw - hs)
-put(mask(G["choinka"], H=cm(100)), 795, bottom=1372)
-put(mask(G["aniol"], H=cm(88)), 1104, bottom=1372)
+# ---------------- cena: (desenho, cx, ancoragem, valor_y, largura_px | None, altura_px | None)
+def fit(k, W=None, H=None):
+    b = G[k].bounds; w, h = b[2] - b[0], b[3] - b[1]
+    return (W, W * h / w) if W else (H * w / h, H)
+CENA = []
+def add(k, cx, W=None, H=None, top=None, bottom=None, cy=None):
+    w, h = fit(k, W, H)
+    y0 = top if top is not None else (bottom - h if bottom is not None else cy - h / 2)
+    CENA.append((k, cx - w / 2, y0, w, h))
+
+# vidro grande: porta esquerda x 668–950 · porta direita x 954–1255 · vidro y 932–1430
+wW = cm(112); hW = wW * 43 / 273
+wS = wW * 168 / 273; hS = wS * 49 / 168
+add("wesolych", 809, W=wW, top=957)
+add("swiat", 1104, W=wS, top=957 + hW - hS)
+add("choinka", 795, H=cm(100), bottom=1372)
+add("aniol", 1104, H=cm(88), bottom=1372)
 for (x, y, s) in [(700, 1040, 20), (905, 1060, 14), (742, 1112, 11), (1000, 1050, 15), (1222, 1034, 20), (1182, 1120, 11), (880, 1135, 10)]:
-    put(mask(G["sniezynka"], H=cm(s)), x, cy=y)
-fx = mask(G["faixa"], W=cm(37))
+    add("sniezynka", x, H=cm(s), cy=y)
 for i in range(7):
-    put(fx, 700 + i * 81, bottom=1424)
-for x in (707, 1212):                         # bandeira superior, ao lado do letreiro
-    put(mask(G["rozeta"], W=cm(16)), x, cy=868, op=0.85)
-
+    add("faixa", 700 + i * 81, W=cm(37), bottom=1424)
+for x in (707, 1212):
+    add("rozeta", x, W=cm(16), cy=868)
 # janela (vidro x 388–548, y 1058–1230)
-put(mask(G["rozeta"], W=cm(46)), 468, cy=1140)
-for (x, y) in [(405, 1076), (531, 1076)]:
-    put(mask(G["sniezynka"], H=cm(13)), x, cy=y)
+add("rozeta", 468, W=cm(46), cy=1140)
+for x in (405, 531):
+    add("sniezynka", x, H=cm(13), cy=1076)
+# porta de grade (vidro atrás da grade) e parede sob a janela
+add("betlejemska", 214, H=cm(42), cy=1185)
+add("ptaszki", 468, W=cm(118), top=1253)
 
-# =================== PAREDE, JANELA E PORTA: só os desenhos do PDF ===================
-# parede sob a janela: Ptaszki pintado com o mesmo stencil (spray branco na parede)
-put(mask(G["ptaszki"], W=cm(118)), 468, top=1253, op=0.95)
-# vidro da porta de grade: Estrela de Belém em neve spray
-put(mask(G["betlejemska"], H=cm(42)), 214, cy=1185)
+ESCADA = [(160, 1262), (255, 1262), (1052, 1405), (1052, 1548), (140, 1500)]
 
-# =================== devolve a escada para a frente ===================
-orig = np.asarray(foto.resize(img.size, Image.LANCZOS), float)
-band = Image.new("L", img.size, 0)
-ImageDraw.Draw(band).polygon([(p[0] * SS, p[1] * SS) for p in
-    [(160, 1262), (255, 1262), (1052, 1405), (1052, 1548), (140, 1500)]], fill=255)
-band = np.asarray(band) > 0
-L = orig.mean(-1); sat = orig.max(-1) - orig.min(-1)
-escada = band & (L > 178) & (sat < 28)
-escada = np.asarray(Image.fromarray((escada * 255).astype(np.uint8)).filter(ImageFilter.MaxFilter(3)).filter(ImageFilter.GaussianBlur(1)), float)[..., None] / 255
-cur = np.asarray(img, float)
-img = Image.fromarray((cur * (1 - escada) + orig * escada).astype(np.uint8))
+def render(box, S, nome):
+    """Renderiza a região box=(x0,y0,x1,y1) da foto ampliada S vezes."""
+    x0, y0, x1, y1 = box
+    base = foto.crop(box).resize(((x1 - x0) * S, (y1 - y0) * S), Image.BICUBIC)
+    orig = np.asarray(base, float)
+    arr = orig.copy()
+    for k, gx, gy, w, h in CENA:
+        if gx > x1 or gx + w < x0 or gy > y1 or gy + h < y0: continue
+        g = G[k]; b = g.bounds
+        kk = w / (b[2] - b[0]) * S
+        ox, oy = (gx - x0) * S, (gy - y0) * S
+        W, H = arr.shape[1], arr.shape[0]
+        SSA = 3
+        im = Image.new("L", (W * SSA, H * SSA), 0) if False else None
+        # rasteriza só a caixa do desenho
+        bx0, by0 = int(max(0, ox)), int(max(0, oy))
+        bx1, by1 = int(min(W, ox + w * S + 2)), int(min(H, oy + h * S + 2))
+        if bx1 <= bx0 or by1 <= by0: continue
+        m = Image.new("L", ((bx1 - bx0) * SSA, (by1 - by0) * SSA), 0); d = ImageDraw.Draw(m)
+        polys = [g] if isinstance(g, Polygon) else list(g.geoms)
+        tr = lambda cs: [(((x - b[0]) * kk + ox - bx0) * SSA, ((y - b[1]) * kk + oy - by0) * SSA) for x, y in cs]
+        for p in polys:
+            d.polygon(tr(p.exterior.coords), fill=255)
+            for i in p.interiors: d.polygon(tr(i.coords), fill=0)
+        m = m.resize((bx1 - bx0, by1 - by0), Image.LANCZOS)
+        a = (np.asarray(m, float) / 255 * 0.93)[..., None]
+        reg = arr[by0:by1, bx0:bx1]
+        arr[by0:by1, bx0:bx1] = reg * (1 - a) + np.array([252, 252, 250.0]) * a
+    # escada volta para a frente
+    band = Image.new("L", base.size, 0)
+    ImageDraw.Draw(band).polygon([((px - x0) * S, (py - y0) * S) for px, py in ESCADA], fill=255)
+    band = np.asarray(band) > 0
+    L = orig.mean(-1); sat = orig.max(-1) - orig.min(-1)
+    e = (band & (L > 200) & (sat < 24)).astype(np.uint8) * 255
+    e = np.asarray(Image.fromarray(e).filter(ImageFilter.MaxFilter(3)).filter(ImageFilter.GaussianBlur(S / 2)), float)[..., None] / 255
+    arr = arr * (1 - e) + orig * e
+    Image.fromarray(arr.clip(0, 255).astype(np.uint8)).save(f"{OUT}/{nome}.jpg", quality=92)
 
-img.resize(foto.size, Image.LANCZOS).save(f"{OUT}/fachada-natal.jpg", quality=92)
-img.crop((0, 760 * SS, 1500 * SS, 1460 * SS)).save(f"{OUT}/fachada-natal-detalhe.jpg", quality=90)
+render((0, 0, 1500, 2000), 2, "fachada-natal")
+render((0, 760, 1500, 1460), 2, "fachada-natal-detalhe")
+render((660, 925, 960, 1440), 5, "close-porta-esquerda")
+render((945, 925, 1265, 1440), 5, "close-porta-direita")
+render((120, 990, 650, 1430), 4, "close-janela-porta-parede")
 print("ok")
